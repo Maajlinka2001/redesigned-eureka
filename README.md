@@ -1,11 +1,2 @@
-# redesigned-eureka
-### headline 3
-# headline 1
-**bold**
-*italic*
+# Eye-tracking analysis project 
 
-This is my first project. I am quite excited.
-
-md- MarkDown (editing parts, images, links)
-
-# New change
