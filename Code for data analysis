@@ -1,0 +1,204 @@
+
+#loading libraries
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import mannwhitneyu
+from scipy.stats import wilcoxon
+
+#Creating dataframe from gathered data
+whole_df = pd.read_csv('C:/Users/mzawa/OneDrive/Pulpit/Productlabels/product/merged_updated.csv', sep=';', encoding='ISO-8859-1')
+
+#Dta exploration
+print(whole_df.head())
+#print(whole_df.columns)
+#print(whole_df[["Participant","Gender", "What is your age?"]])
+
+#Looking at whole df
+#pd.set_option('display.max_rows', None)  # Show all rows
+#pd.set_option('display.max_columns', None)  # Show all columns
+#print(whole_df)
+
+#hypothesis number 1 - comparing group A and group B and their fixation time on label vs brand vs whole product
+
+# Convert fixation time values from strings with commas to floats
+def convert_to_float(value):
+    if isinstance(value, str):
+        return float(value.replace(",", "."))
+    return value
+
+# Apply conversion to all fixation time columns
+fixation_columns = [col for col in whole_df.columns if 'brand' in col or 'whole' in col or 'label' in col]
+# Check for non-numeric values in fixation columns
+for col in fixation_columns:
+    print(f"Column: {col}, Non-numeric values: {whole_df[col][~whole_df[col].apply(lambda x: isinstance(x, (int, float)))].unique()}")
+
+# Replace NaNs with 0 before summing
+whole_df[fixation_columns] = whole_df[fixation_columns].fillna(0)
+whole_df[fixation_columns] = whole_df[fixation_columns].map(convert_to_float)
+
+# Create summed fixation time columns
+whole_df["Fixation_Brand"] = whole_df[[f"brand({i})" for i in range(1, 9)]].sum(axis=1, skipna=True)
+whole_df["Fixation_Whole"] = whole_df[[f"whole({i})" for i in range(1, 9)]].sum(axis=1, skipna=True)
+whole_df["Fixation_Label"] = whole_df[[f"label({i})" for i in range(1, 9)]].sum(axis=1, skipna=True)
+
+# Separate Groups
+group_A = whole_df[whole_df["Group"] == "A"]
+group_B = whole_df[whole_df["Group"] == "B"]
+
+print("\n### Mann-Whitney U Test (Group A vs. Group B) ###")
+
+# Mann-Whitney U Test function
+def mann_whitney_test(group_a, group_b, label):
+    u_stat, p_value = mannwhitneyu(group_a, group_b, alternative="two-sided")
+    print(f"{label}: U={u_stat}, p-value={p_value}")
+    return u_stat, p_value
+
+# Test Brand Fixation Time (A vs. B)
+mann_whitney_test(group_A["Fixation_Brand"].dropna(), group_B["Fixation_Brand"].dropna(), "Brand Fixation Time")
+
+# Test Whole Product Fixation Time (A vs. B)
+mann_whitney_test(group_A["Fixation_Whole"].dropna(), group_B["Fixation_Whole"].dropna(), "Whole Product Fixation Time")
+
+#U-MANN VISUALISATION between groups
+# Create a figure with two subplots
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# Boxplot for Brand Fixation Time
+sns.boxplot(data=whole_df, x="Group", y="Fixation_Brand", ax=axes[0],  palette=["mediumpurple", "darkorange"])
+axes[0].set_title("Brand Fixation Time (A vs. B)")
+axes[0].set_ylabel("Fixation Time (ms)")
+
+# Boxplot for Whole Product Fixation Time
+sns.boxplot(data=whole_df, x="Group", y="Fixation_Whole", ax=axes[1], palette=["mediumpurple", "darkorange"])
+axes[1].set_title("Whole Product Fixation Time (A vs. B)")
+axes[1].set_ylabel("Fixation Time (ms)")
+
+# Show the plots
+plt.tight_layout()
+plt.show()
+
+# Comparing Fixation_Whole vs. Fixation_Brand within group A (Wilcoxon Test)
+# Select only Group A
+group_A = whole_df[whole_df["Group"] == "A"]
+
+# Drop missing values to ensure paired data
+paired_data = group_A[["Fixation_Label", "Fixation_Brand"]].dropna()
+
+# Wilcoxon Signed-Rank Test
+w_stat, p_value = wilcoxon(paired_data["Fixation_Label"], paired_data["Fixation_Brand"])
+print(f"Wilcoxon Test (Label vs. Brand Fixation in Group A): W={w_stat}, p-value={p_value}")
+
+# Plot
+plt.figure(figsize=(6, 4))
+custom_colors= ["hotpink", "teal"]
+sns.boxplot(data=paired_data,palette=custom_colors)
+
+# Titles and Labels
+plt.title("Label vs. Brand Fixation Time (Group A)", fontsize=14)
+plt.xlabel("")
+plt.ylabel("Fixation Time (ms)", fontsize=12)
+plt.xticks(ticks=[0, 1], labels=["Label Fixation", "Brand Fixation"])
+
+# Show plot
+plt.show()
+
+#HYPOTHESIS 2 - is the nationality in group A relevant for the label perception 
+# Step 1: Filter Group A
+group_A = whole_df[whole_df["Group"] == "A"]
+
+# Step 2: Separate Data by Nationality
+polish_nationality = group_A[group_A["Nationality"] == "Yes"]["Fixation_Label"].dropna()
+non_polish_nationality = group_A[group_A["Nationality"] == "No"]["Fixation_Label"].dropna()
+
+#air Observations
+# We will take one observation from each group. If there are more than one, we can just take the first one.
+if not polish_nationality.empty and not non_polish_nationality.empty:
+    polish_value = polish_nationality.iloc[0]  # First Polish participant's fixation time
+    non_polish_value = non_polish_nationality.iloc[0]  # First non-Polish participant's fixation time
+    
+    # Create paired data for Wilcoxon test
+    paired_data = pd.DataFrame({
+        'Polish': [polish_value],
+        'Non_Polish': [non_polish_value]
+    })
+    
+    # Step 4: Perform the Wilcoxon Signed-Rank Test
+    w_stat, p_value = wilcoxon(paired_data['Polish'], paired_data['Non_Polish'])
+    print(f"Wilcoxon Test (Label Fixation Time by Nationality in Group A): W={w_stat}, p-value={p_value}")
+else:
+    print("Insufficient data for one or both nationalities.")
+
+# Create a histogram to visualize fixation times by nationality
+plt.figure(figsize=(10, 6))
+sns.histplot(data=group_A, x="Fixation_Label", hue="Nationality", kde=True, bins=10)
+plt.title("Distribution of Label Fixation Time by Nationality (Group A)")
+plt.xlabel("Fixation Time (ms)")
+plt.ylabel("Frequency")
+plt.legend(title="Nationality")
+plt.show()
+
+#HYPOTHESIS 3 - is the attitude important for the label perception (group A) 
+
+# Separating Data by Attitude
+neutral_attitude = group_A[group_A["Attitude"] == "I do not have an opinion on them (neutral attitude)"]["Fixation_Label"].dropna()
+important_role_attitude = group_A[group_A["Attitude"] == "They play an important role"]["Fixation_Label"].dropna()
+
+#The Wilcoxon Signed-Rank Test
+# We will take one observation from each group. If there are more than one, we can just take the first one.
+if not neutral_attitude.empty and not important_role_attitude.empty:
+    neutral_value = neutral_attitude.iloc[0]  # First neutral participant's fixation time
+    important_value = important_role_attitude.iloc[0]  # First participant's fixation time who thinks they play an important role
+    
+    # Creating paired data for Wilcoxon test
+    paired_data = pd.DataFrame({
+        'Neutral': [neutral_value],
+        'Important_Role': [important_value]
+    })
+    
+    #The Wilcoxon Signed-Rank Test
+    w_stat, p_value = wilcoxon(paired_data['Neutral'], paired_data['Important_Role'])
+    print(f"Wilcoxon Test (Label Fixation Time by Attitude in Group A): W={w_stat}, p-value={p_value}")
+else:
+    print("Insufficient data for one or both attitudes.")
+
+# Create a histogram to visualize fixation times by attitude
+plt.figure(figsize=(10, 6))
+colors = ['lightgreen', 'grey']
+sns.histplot(data=group_A, x="Fixation_Label", hue="Attitude", kde=True, bins=10, multiple="stack", palette=colors)
+#sns.histplot(data=group_A, x="Fixation_Label", hue="Attitude", kde=True, bins=10, multiple="stack")
+plt.title("Distribution of Label Fixation Time by Attitude (Group A)")
+plt.xlabel("Fixation Time (ms)")
+plt.ylabel("Frequency")
+plt.legend(title="Attitude", loc='upper right') 
+plt.show()
+
+#HYPOTHESIS 4 - is the attitude important for the brand perception (group A and group B)
+
+# Separating Data by Attitude across both groups (A and B)
+neutral_attitude = whole_df[whole_df["Attitude"] == "I do not have an opinion on them (neutral attitude)"]["Fixation_Brand"].dropna()
+important_role_attitude = whole_df[whole_df["Attitude"] == "They play an important role"]["Fixation_Brand"].dropna()
+
+# Mann-Whitney U Test
+if not neutral_attitude.empty and not important_role_attitude.empty:
+    u_stat, p_value = mannwhitneyu(neutral_attitude, important_role_attitude, alternative="two-sided")
+    print(f"Mann-Whitney U Test (Brand Fixation Time by Attitude - Both Groups): U={u_stat}, p-value={p_value}")
+else:
+    print("Insufficient data for one or both attitude groups.")
+
+print(whole_df["Attitude"].value_counts())
+print(whole_df.groupby("Attitude")["Fixation_Brand"].describe())
+
+plt.figure(figsize=(8, 5))
+sns.boxplot(data=whole_df, x="Attitude", y="Fixation_Brand", palette=["cornflowerblue", "orangered"], showfliers=False)
+sns.stripplot(data=whole_df, x="Attitude", y="Fixation_Brand", color="black", size=8, jitter=True)
+
+plt.title("Brand Fixation Time by Attitude", fontsize=14, fontweight="bold")
+plt.xlabel("Attitude", fontsize=12)
+plt.ylabel("Fixation Time (ms)", fontsize=12)
+plt.xticks(rotation=15)
+
+plt.show()
+
+```
